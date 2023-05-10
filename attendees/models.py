@@ -1,5 +1,6 @@
 from django.db import models
 from django.urls import reverse
+from django.core.exceptions import ObjectDoesNotExist
 
 
 class Attendee(models.Model):
@@ -18,6 +19,12 @@ class Attendee(models.Model):
         related_name="attendees",
         on_delete=models.CASCADE,
     )
+
+    def create_badge(self):
+        try:
+            self.badge
+        except ObjectDoesNotExist:
+            Badge.objects.create(attendee=self)
 
     def __str__(self):
         return self.name
