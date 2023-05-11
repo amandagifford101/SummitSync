@@ -6,6 +6,10 @@ from common.json import ModelEncoder
 
 from events.models import Conference
 
+from django.views.decorators.http import require_http_methods
+
+import json
+
 
 class AttendeeListEncoder(ModelEncoder):
     model = Attendee
@@ -14,6 +18,7 @@ class AttendeeListEncoder(ModelEncoder):
     ]
 
 
+@require_http_methods(["GET", "POST"])
 def api_list_attendees(request, conference_id):
     """
     Lists the attendees names and the link to the attendee
@@ -34,9 +39,21 @@ def api_list_attendees(request, conference_id):
         ]
     }
     """
-    attendees = Attendee.objects.all()
+    if request.method == "GET":
+        attendees = Attendee.objects.all()
 
-    return JsonResponse(attendees, AttendeeListEncoder, False)
+        return JsonResponse(attendees, AttendeeListEncoder, False)
+    else:
+        content = json.loads(request.body)
+        try:
+            conference = Conference.objects.get(id=conference_id)
+            content["conference"] = conference
+        except Conference.DoesNotExist:
+            return JsonResponse(
+                {"message": "Invalid conference id"}, status=400
+            )
+        attendee = Attendee.objects.create(**content)
+        return JsonResponse(attendee, AttendeeDetailEncoder, False)
 
 
 class ConferenceDetailEncoder(ModelEncoder):
@@ -60,6 +77,7 @@ class AttendeeDetailEncoder(ModelEncoder):
     }
 
 
+@require_http_methods(["GET", "PUT", "DELETE"])
 def api_show_attendee(request, id):
     """
     Returns the details for the Attendee model specified
@@ -80,6 +98,26 @@ def api_show_attendee(request, id):
         }
     }
     """
-    attendee = Attendee.objects.get(id=id)
+    if request.method == "GET":
+        attendee = Attendee.objects.get(id=id)
 
-    return JsonResponse(attendee, AttendeeDetailEncoder, False)
+        return JsonResponse(attendee, AttendeeDetailEncoder, False)
+    elif request.method == "DELETE":
+        count, _ = Attendee.objects.filter(id=id).delete()
+        return JsonResponse({"deleted": count > 0})
+    else:
+        content = json.loads(request.body)
+        # try:
+        #     conference = Conference.objects.get(
+        #         conference=content["conference"]
+        #     )
+        #     content["conference"] = conference
+        # except Conference.DoesNotExist:
+        #     return JsonResponse(
+        #         {"message": "Conference doesn't exist for user"}, status=400
+        #     )
+        # Above Code not needed... maybe ask why?
+
+        Attendee.objects.filter(id=id).update(**content)
+        attendee = Attendee.objects.get(id=id)
+        return JsonResponse(attendee, AttendeeDetailEncoder, False)
