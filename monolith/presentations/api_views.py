@@ -10,7 +10,8 @@ import json
 
 from events.api_views import Conference
 
-from events.api_views import ConferenceDetailEncoder
+from events.api_views import ConferenceListEncoder
+import pika
 
 
 @require_http_methods(["GET", "POST"])
@@ -70,8 +71,11 @@ class PresentationDetailEncoder(ModelEncoder):
         "conference",
     ]
     encoders = {
-        "conference": ConferenceDetailEncoder(),
+        "conference": ConferenceListEncoder(),
     }
+
+    def get_extra_data(self, o):
+        return {"status": o.status.name}
 
 
 @require_http_methods(["PUT", "DELETE", "GET"])
@@ -120,3 +124,111 @@ def api_show_presentation(request, id):
         Presentation.objects.filter(id=id).update(**content)
         presentation = Presentation.objects.get(id=id)
         return JsonResponse(presentation, PresentationDetailEncoder, False)
+
+# @require_http_methods(['PUT'])
+# def api_approve_presentation(request, id):
+#     presentation = Presentation.objects.get(id=id)
+#     d = {"presenter_name": presentation.presenter_name,
+#          "presenter_email": presentation.presenter_email,
+#          "title": presentation.title}
+#     parameters = pika.ConnectionParameters(host='rabbitmq')
+
+#     connection = pika.BlockingConnection(parameters)
+
+#     channel = connection.channel()
+
+#     channel.queue_declare(queue='presentation_approvals')
+
+#     content = json.dumps(d)
+
+#     channel.basic_publish(exchange='', routing_key='presentation_approvals', body=content)
+#     presentation.approve()
+#     connection.close()
+#     return JsonResponse(
+#         presentation,
+#         encoder = PresentationDetailEncoder,
+#         safe = False,
+#     )
+
+# @require_http_methods(["PUT"])
+# def api_reject_presentation(request, id):
+#     presentation = Presentation.objects.get(id=id)
+
+#     parameters = pika.ConnectionParameters(host='rabbitmq')
+
+#     connection = pika.BlockingConnection(parameters)
+
+#     channel = connection.channel()
+
+#     channel.queue_declare(queue='presentation_rejections')
+
+#     d = {"presenter_name": presentation.presenter_name,
+#          "presenter_email": presentation.presenter_email,
+#          "title": presentation.title}
+
+#     content = json.dumps(d)
+
+#     channel.basic_publish(exchange='', routing_key='presentation_rejections', body=content)
+#     presentation.reject()
+#     connection.close()
+#     return JsonResponse(
+#         presentation,
+#         PresentationDetailEncoder,
+#         False
+#     )
+
+@require_http_methods(["PUT"])
+def api_approve_presentation(request, id):
+    presentation = Presentation.objects.get(id=id)
+    presentation.approve()
+    new_dict = {
+        "presenter_name": presentation.presenter_name,
+        "presenter_email": presentation.presenter_email,
+        "title": presentation.title,
+    }
+    message = json.dumps(new_dict)
+
+    parameters = pika.ConnectionParameters(host="rabbitmq")
+    connection = pika.BlockingConnection(parameters)
+    channel = connection.channel()
+    channel.queue_declare(queue="presentation_approvals")
+    channel.basic_publish(
+        exchange="",
+        routing_key="presentation_approvals",
+        body=message
+    )
+    connection.close()
+    return JsonResponse(
+        presentation,
+        encoder=PresentationDetailEncoder,
+        safe=False,)
+
+
+
+@require_http_methods(["PUT"])
+def api_reject_presentation(request, id):
+    presentation = Presentation.objects.get(id=id)
+    presentation.reject()
+    new_dict = {
+        "presenter_name": presentation.presenter_name,
+        "presenter_email": presentation.presenter_email,
+        "title": presentation.title,
+    }
+    message = json.dumps(new_dict)
+
+    parameters = pika.ConnectionParameters(host="rabbitmq")
+    connection = pika.BlockingConnection(parameters)
+    channel = connection.channel()
+    channel.queue_declare(queue="presentation_rejections")
+    channel.basic_publish(
+        exchange="",
+        routing_key="presentation_rejections",
+        body=message
+    )
+    presentation = Presentation.objects.get(id=id)
+    presentation.reject()
+    return JsonResponse(
+        presentation,
+        encoder=PresentationDetailEncoder,
+        safe=False,
+    )
